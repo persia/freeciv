@@ -7,4 +7,5 @@ cat-id-tbl.c
 *.mo
 *.gmo
 *.pox
+nb.po
 messages
