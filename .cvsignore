@@ -22,3 +22,4 @@ ser
 *.sav.gz
 freeciv_user_database
 manual*.html
+freeciv.spec
