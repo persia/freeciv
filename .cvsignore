@@ -1,6 +1,8 @@
 acinclude.m4
 aclocal.m4
+autom4te.cache
 config.cache
+depcomp
 Makefile
 Makefile.in
 config.h
@@ -9,6 +11,7 @@ config.log
 config.status
 configure
 stamp-h
+stamp-h1
 undep.sh
 civclient
 civserver
