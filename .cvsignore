@@ -8,3 +8,5 @@ undep.sh
 civclient
 civserver
 .deps
+*.sav
+*.sav.gz
