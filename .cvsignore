@@ -6,3 +6,4 @@ config.status
 stamp-h
 civclient
 civserver
+.deps
