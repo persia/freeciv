@@ -13,12 +13,15 @@
 #ifndef __LOG_
 #define __LOG_
 
+#include "attribute.h"
+
 #define LOG_FATAL  0
 #define LOG_NORMAL 1
 #define LOG_DEBUG  2
 
 void log_init(char *filename);
-int freelog(int level, char *message, ...);
+int freelog(int level, char *message, ...)
+            fc__attribute((format (printf, 2, 3)));
 void log_set_level(int level);
 void log_kill(void);
 
