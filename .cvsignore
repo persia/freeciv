@@ -18,3 +18,4 @@ civserver
 .deps
 *.sav
 *.sav.gz
+freeciv_user_database
