@@ -6,3 +6,4 @@ stamp-cat-id
 cat-id-tbl.c
 *.mo
 *.gmo
+*.pox
