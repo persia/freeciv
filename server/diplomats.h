@@ -17,10 +17,12 @@
 
 #include "gotohand.h"		/* enum goto_move_restriction */
 
+void diplomat_embassy(struct player *pplayer, struct unit *pdiplomat,
+			  struct city *pcity);
 void diplomat_investigate(struct player *pplayer, struct unit *pdiplomat,
 			  struct city *pcity);
-void spy_get_sabotage_list(struct player *pplayer, struct unit *pdiplomat,
-			   struct city *pcity);
+void spy_send_sabotage_list(struct connection *pc, struct unit *pdiplomat,
+			    struct city *pcity);
 void spy_poison(struct player *pplayer, struct unit *pdiplomat, 
 		struct city *pcity);
 void spy_sabotage_unit(struct player *pplayer, struct unit *pdiplomat,

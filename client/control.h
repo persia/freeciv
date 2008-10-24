@@ -91,6 +91,8 @@ void request_unit_select_same_type(struct unit_list *punits);
 void request_unit_select_same_type_tile(struct unit_list *punits);
 void request_diplomat_action(enum diplomat_actions action, int dipl_id,
 			     int target_id, int value);
+void request_diplomat_answer(enum diplomat_actions action, int dipl_id,
+			     int target_id, int value);
 void request_toggle_city_outlines(void);
 void request_toggle_city_output(void);
 void request_toggle_map_grid(void);

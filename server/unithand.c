@@ -190,36 +190,81 @@ void handle_unit_upgrade(struct player *pplayer, int unit_id)
   }
 }
 
-/***************************************************************
-  Tell the client the cost of inciting a revolt or bribing a unit.
+/**************************************************************************
+  Tell the client the cost of bribing a unit, inciting a revolt, or
+  any other parameters needed for action.
+
   Only send result back to the requesting connection, not all
   connections for that player.
-***************************************************************/
-void handle_unit_bribe_inq(struct connection *pc, int unit_id)
+**************************************************************************/
+void handle_unit_diplomat_query(struct connection *pc,
+				int diplomat_id,
+				int target_id,
+				int value,
+				enum diplomat_actions action_type)
 {
   struct player *pplayer = pc->playing;
-  struct unit *punit = game_find_unit_by_number(unit_id);
+  struct unit *pdiplomat = player_find_unit_by_id(pplayer, diplomat_id);
+  struct unit *punit = game_find_unit_by_number(target_id);
+  struct city *pcity = game_find_city_by_number(target_id);
 
-  if (NULL == punit) {
+  if (NULL == pdiplomat) {
     /* Shouldn't happen */
-    freelog(LOG_ERROR, "handle_unit_bribe_inq()"
-	    " invalid unit %d",
-	    unit_id);
+    freelog(LOG_ERROR, "handle_unit_diplomat_query()"
+	    " invalid diplomat %d",
+	    diplomat_id);
     return;
   }
 
-  if (pplayer) {
-    punit->bribe_cost = unit_bribe_cost(punit);
-    dsend_packet_unit_bribe_info(pc, unit_id, punit->bribe_cost);
+  if (!unit_has_type_flag(pdiplomat, F_DIPLOMAT)) {
+    /* Shouldn't happen */
+    freelog(LOG_ERROR, "handle_unit_diplomat_query()"
+	    " %s (%d) is not diplomat",
+	    unit_rule_name(pdiplomat),
+	    diplomat_id);
+    return;
   }
+
+  switch (action_type) {
+  case DIPLOMAT_BRIBE:
+    if (punit && diplomat_can_do_action(pdiplomat, DIPLOMAT_BRIBE,
+					punit->tile)) {
+      dsend_packet_unit_diplomat_answer(pc,
+					diplomat_id, target_id,
+					unit_bribe_cost(punit),
+					action_type);
+    }
+    break;
+  case DIPLOMAT_INCITE:
+    if (pcity && diplomat_can_do_action(pdiplomat, DIPLOMAT_INCITE,
+					pcity->tile)) {
+      dsend_packet_unit_diplomat_answer(pc,
+					diplomat_id, target_id,
+					city_incite_cost(pplayer, pcity),
+					action_type);
+    }
+    break;
+  case DIPLOMAT_SABOTAGE:
+    if (pcity && diplomat_can_do_action(pdiplomat, DIPLOMAT_SABOTAGE,
+					pcity->tile)
+     && unit_has_type_flag(pdiplomat, F_SPY)) {
+      spy_send_sabotage_list(pc, pdiplomat, pcity);
+    }
+    break;
+  default:
+    /* Nothing */
+    break;
+  };
 }
 
-/***************************************************************
+/**************************************************************************
 ...
-***************************************************************/
-void handle_unit_diplomat_action(struct player *pplayer, int diplomat_id,
-				 enum diplomat_actions action_type,
-				 int target_id, int value)
+**************************************************************************/
+void handle_unit_diplomat_action(struct player *pplayer,
+				 int diplomat_id,
+				 int target_id,
+				 int value,
+				 enum diplomat_actions action_type)
 {
   struct unit *pdiplomat = player_find_unit_by_id(pplayer, diplomat_id);
   struct unit *punit = game_find_unit_by_number(target_id);
@@ -275,6 +320,12 @@ void handle_unit_diplomat_action(struct player *pplayer, int diplomat_id,
 	diplomat_investigate(pplayer, pdiplomat, pcity);
       }
       break;
+    case DIPLOMAT_EMBASSY:
+      if(pcity && diplomat_can_do_action(pdiplomat, DIPLOMAT_EMBASSY,
+					 pcity->tile)) {
+	diplomat_embassy(pplayer, pdiplomat, pcity);
+      }
+      break;
     case DIPLOMAT_INCITE:
       if(pcity && diplomat_can_do_action(pdiplomat, DIPLOMAT_INCITE,
 					 pcity->tile)) {
@@ -292,12 +343,6 @@ void handle_unit_diplomat_action(struct player *pplayer, int diplomat_id,
 					 pcity->tile)) {
 	/* packet value is technology ID (or some special codes) */
 	diplomat_get_tech(pplayer, pdiplomat, pcity, value);
-      }
-      break;
-    case SPY_GET_SABOTAGE_LIST:
-      if(pcity && diplomat_can_do_action(pdiplomat, SPY_GET_SABOTAGE_LIST,
-					 pcity->tile)) {
-	spy_get_sabotage_list(pplayer, pdiplomat, pcity);
       }
       break;
     case DIPLOMAT_ANY_ACTION:
@@ -1183,8 +1228,9 @@ bool unit_move_handling(struct unit *punit, struct tile *pdesttile,
         } else {
           die("Bug in unithand.c: no diplomat target.");
         }
-	dlsend_packet_unit_diplomat_popup_dialog(player_reply_dest(pplayer),
-						 punit->id, target_id);
+	dlsend_packet_unit_diplomat_answer(player_reply_dest(pplayer),
+					   punit->id, target_id,
+					   0, DIPLOMAT_MOVE);
         return FALSE;
       } else if (!can_unit_move_to_tile(punit, pdesttile, igzoc)) {
         if (can_unit_exist_at_tile(punit, punit->tile)) {

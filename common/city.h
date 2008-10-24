@@ -316,8 +316,6 @@ struct city {
   int food_stock;
   int shield_stock;
   int pollution;                /* not saved */
-  /* city can't be incited if INCITE_IMPOSSIBLE_COST */
-  int incite_revolt_cost;      
 
   /* turn states */
   int airlift;

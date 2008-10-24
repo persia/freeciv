@@ -103,14 +103,14 @@ static struct {
   GEN_EV(E_MY_DIPLOMAT_BRIBE,		E_S_D_ME,	N_("Bribe")),
   GEN_EV(E_DIPLOMATIC_INCIDENT,		E_S_D_ME,	N_("Caused Incident")),
   GEN_EV(E_MY_DIPLOMAT_ESCAPE,		E_S_D_ME,	N_("Escape")),
-  GEN_EV(E_UNUSED1,			E_S_D_ME,	N_("Embassy")),
+  GEN_EV(E_MY_DIPLOMAT_EMBASSY,		E_S_D_ME,	N_("Embassy")),
   GEN_EV(E_MY_DIPLOMAT_FAILED,		E_S_D_ME,	N_("Failed")),
   GEN_EV(E_MY_DIPLOMAT_INCITE,		E_S_D_ME,	N_("Incite")),
   GEN_EV(E_MY_DIPLOMAT_POISON,		E_S_D_ME,	N_("Poison")),
   GEN_EV(E_MY_DIPLOMAT_SABOTAGE,	E_S_D_ME,	N_("Sabotage")),
   GEN_EV(E_MY_DIPLOMAT_THEFT,		E_S_D_ME,	N_("Theft")),
   GEN_EV(E_ENEMY_DIPLOMAT_BRIBE,	E_S_D_THEM,	N_("Bribe")),
-  GEN_EV(E_UNUSED2,			E_S_D_THEM,	N_("Embassy")),
+  GEN_EV(E_ENEMY_DIPLOMAT_EMBASSY,	E_S_D_THEM,	N_("Embassy")),
   GEN_EV(E_ENEMY_DIPLOMAT_FAILED,	E_S_D_THEM,	N_("Failed")),
   GEN_EV(E_ENEMY_DIPLOMAT_INCITE,	E_S_D_THEM,	N_("Incite")),
   GEN_EV(E_ENEMY_DIPLOMAT_POISON,	E_S_D_THEM,	N_("Poison")),
@@ -139,7 +139,7 @@ static struct {
   GEN_EV(E_TREATY_ALLIANCE,	E_S_TREATY,	N_("Alliance")),
   GEN_EV(E_TREATY_BROKEN,	E_S_TREATY,	N_("Broken")),
   GEN_EV(E_TREATY_CEASEFIRE,	E_S_TREATY,	N_("Cease-fire")),
-  GEN_EV(E_UNUSED3,		E_S_TREATY,	N_("Embassy")),
+  GEN_EV(E_TREATY_EMBASSY,	E_S_TREATY,	N_("Embassy")),
   GEN_EV(E_TREATY_PEACE,	E_S_TREATY,	N_("Peace")),
   GEN_EV(E_TREATY_SHARED_VISION,E_S_TREATY,	N_("Shared Vision")),
   GEN_EV(E_UNIT_LOST_ATT,	E_S_UNIT,	N_("Attack Failed")),
@@ -252,12 +252,14 @@ bool is_city_event(enum event_type event)
   case E_UNIT_LOST_MISC:
   case E_UNIT_WIN:
   case E_ENEMY_DIPLOMAT_FAILED:
+  case E_ENEMY_DIPLOMAT_EMBASSY:
   case E_ENEMY_DIPLOMAT_POISON:
   case E_ENEMY_DIPLOMAT_BRIBE:
   case E_ENEMY_DIPLOMAT_INCITE:
   case E_ENEMY_DIPLOMAT_SABOTAGE:
   case E_ENEMY_DIPLOMAT_THEFT:
   case E_MY_DIPLOMAT_FAILED:
+  case E_MY_DIPLOMAT_EMBASSY:
   case E_MY_DIPLOMAT_POISON:
   case E_MY_DIPLOMAT_BRIBE:
   case E_MY_DIPLOMAT_INCITE:

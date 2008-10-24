@@ -1125,7 +1125,20 @@ static void diplomat_sabotage_callback(HWND w, void * data)
  
   process_diplomat_arrival(NULL, 0);
 }                  
-
+/*****************************************************************/
+static void diplomat_embassy_callback(HWND w, void * data)
+{
+  destroy_message_dialog(w);
+  diplomat_dialog=0;
+ 
+  if(game_find_unit_by_number(diplomat_id) &&
+     (game_find_city_by_number(diplomat_target_id))) {
+    request_diplomat_action(DIPLOMAT_EMBASSY, diplomat_id,
+			    diplomat_target_id, 0);
+  }
+ 
+  process_diplomat_arrival(NULL, 0);
+}    
 /****************************************************************
 ...
 *****************************************************************/
@@ -1294,7 +1307,7 @@ static void spy_request_sabotage_list(HWND w, void * data)
 
   if (game_find_unit_by_number(diplomat_id)
    && game_find_city_by_number(diplomat_target_id)) {
-    request_diplomat_action(SPY_GET_SABOTAGE_LIST, diplomat_id,
+    request_diplomat_answer(DIPLOMAT_SABOTAGE, diplomat_id,
 			    diplomat_target_id, 0);
   }
 }
@@ -1331,7 +1344,8 @@ static void diplomat_bribe_callback(HWND w, void * data)
   
   if (game_find_unit_by_number(diplomat_id)
    && game_find_unit_by_number(diplomat_target_id)) { 
-    dsend_packet_unit_bribe_inq(&client.conn, diplomat_target_id);
+    request_diplomat_answer(DIPLOMAT_BRIBE, diplomat_id,
+			    diplomat_target_id, 0);
    }
 
 }
@@ -1339,17 +1353,17 @@ static void diplomat_bribe_callback(HWND w, void * data)
 /****************************************************************
 ...
 *****************************************************************/
-void popup_bribe_dialog(struct unit *punit)
+void popup_bribe_dialog(struct unit *punit, int cost)
 {
   char buf[128];
   if (unit_has_type_flag(punit, F_UNBRIBABLE)) {
     popup_message_dialog(root_window, _("Ooops..."),
                          _("This unit cannot be bribed!"),
                          diplomat_bribe_no_callback, 0, 0);
-  } else if (punit->bribe_cost <= client.conn.playing->economic.gold) {
+  } else if (cost <= client.conn.playing->economic.gold) {
     my_snprintf(buf, sizeof(buf),
                 _("Bribe unit for %d gold?\nTreasury contains %d gold."), 
-                punit->bribe_cost, client.conn.playing->economic.gold);
+                cost, client.conn.playing->economic.gold);
     popup_message_dialog(root_window, /*"diplomatbribedialog"*/_("Bribe Enemy Unit"
 ), buf,
                         _("_Yes"), diplomat_bribe_yes_callback, 0,
@@ -1358,7 +1372,7 @@ void popup_bribe_dialog(struct unit *punit)
     my_snprintf(buf, sizeof(buf),
                 _("Bribing the unit costs %d gold.\n"
                   "Treasury contains %d gold."), 
-                punit->bribe_cost, client.conn.playing->economic.gold);
+                cost, client.conn.playing->economic.gold);
     popup_message_dialog(root_window, /*"diplomatnogolddialog"*/
 	    	_("Traitors Demand Too Much!"), buf, _("Darn"),
 		diplomat_bribe_no_callback, 0, 0);
@@ -1515,26 +1529,27 @@ static void diplomat_incite_callback(HWND w, void * data)
 
   if (game_find_unit_by_number(diplomat_id)
    && game_find_city_by_number(diplomat_target_id)) {
-    dsend_packet_city_incite_inq(&client.conn, diplomat_target_id);
+    request_diplomat_answer(DIPLOMAT_INCITE, diplomat_id,
+			    diplomat_target_id, 0);
   }
 }
 
 /****************************************************************
 Popup the yes/no dialog for inciting, since we know the cost now
 *****************************************************************/
-void popup_incite_dialog(struct city *pcity)
+void popup_incite_dialog(struct city *pcity, int cost)
 {
   char buf[128];
 
-  if (INCITE_IMPOSSIBLE_COST == pcity->incite_revolt_cost) {
+  if (INCITE_IMPOSSIBLE_COST == cost) {
     my_snprintf(buf, sizeof(buf), _("You can't incite a revolt in %s."),
 		city_name(pcity));
     popup_message_dialog(root_window, _("City can't be incited!"), buf,
 			 _("Darn"), diplomat_incite_no_callback, 0, 0);
-  } else if (pcity->incite_revolt_cost <= client.conn.playing->economic.gold) {
+  } else if (cost <= client.conn.playing->economic.gold) {
     my_snprintf(buf, sizeof(buf),
 		_("Incite a revolt for %d gold?\nTreasury contains %d gold."), 
-		pcity->incite_revolt_cost, client.conn.playing->economic.gold);
+		cost, client.conn.playing->economic.gold);
    diplomat_target_id = pcity->id;
    popup_message_dialog(root_window, /*"diplomatrevoltdialog"*/_("Incite a Revolt!"), buf,
 		       _("_Yes"), diplomat_incite_yes_callback, 0,
@@ -1543,7 +1558,7 @@ void popup_incite_dialog(struct city *pcity)
     my_snprintf(buf, sizeof(buf),
 		_("Inciting a revolt costs %d gold.\n"
 		  "Treasury contains %d gold."), 
-		pcity->incite_revolt_cost, client.conn.playing->economic.gold);
+		cost, client.conn.playing->economic.gold);
    popup_message_dialog(root_window, /*"diplomatnogolddialog"*/_("Traitors Demand Too Much!"), buf,
 		       _("Darn"), diplomat_incite_no_callback, 0, 
 		       0);
@@ -1587,6 +1602,7 @@ void popup_diplomat_dialog(struct unit *punit, struct tile *ptile)
     if(!unit_has_type_flag(punit, F_SPY)){
       shl=popup_message_dialog(root_window, /*"diplomatdialog"*/
 			       _("Choose Your Diplomat's Strategy"), buf,
+         		     _("Establish _Embassy"), diplomat_embassy_callback, 0,
          		     _("_Investigate City"), diplomat_investigate_callback, 0,
          		     _("_Sabotage City"), diplomat_sabotage_callback, 0,
          		     _("Steal _Technology"), diplomat_steal_callback, 0,
@@ -1594,21 +1610,20 @@ void popup_diplomat_dialog(struct unit *punit, struct tile *ptile)
          		     _("_Cancel"), diplomat_cancel_callback, 0,
          		     0);
       
-      if (!diplomat_can_do_action(punit, DIPLOMAT_INVESTIGATE, ptile)) {
-        message_dialog_button_set_sensitive(shl, 0, FALSE);
-      }
-      if (!diplomat_can_do_action(punit, DIPLOMAT_SABOTAGE, ptile)) {
-        message_dialog_button_set_sensitive(shl, 1, FALSE);
-      }
-      if (!diplomat_can_do_action(punit, DIPLOMAT_STEAL, ptile)) {
-        message_dialog_button_set_sensitive(shl, 2, FALSE);
-      }
-      if (!diplomat_can_do_action(punit, DIPLOMAT_INCITE, ptile)) {
-        message_dialog_button_set_sensitive(shl, 3, FALSE);
-      }
-    } else {
+      if (!diplomat_can_do_action(punit, DIPLOMAT_EMBASSY, ptile))
+       message_dialog_button_set_sensitive(shl,0,FALSE);
+      if (!diplomat_can_do_action(punit, DIPLOMAT_INVESTIGATE, ptile))
+       message_dialog_button_set_sensitive(shl,1,FALSE);
+      if (!diplomat_can_do_action(punit, DIPLOMAT_SABOTAGE, ptile))
+       message_dialog_button_set_sensitive(shl,2,FALSE);
+      if (!diplomat_can_do_action(punit, DIPLOMAT_STEAL, ptile))
+       message_dialog_button_set_sensitive(shl,3,FALSE);
+      if (!diplomat_can_do_action(punit, DIPLOMAT_INCITE, ptile))
+       message_dialog_button_set_sensitive(shl,4,FALSE);
+    }else{
        shl = popup_message_dialog(root_window, /*"spydialog"*/
 		_("Choose Your Spy's Strategy"), buf,
+ 		_("Establish _Embassy"), diplomat_embassy_callback, 0,
 		_("_Investigate City"), diplomat_investigate_callback, 0,
 		_("_Poison City"), spy_poison_callback,0,
  		_("Industrial _Sabotage"), spy_request_sabotage_list, 0,
@@ -1617,22 +1632,19 @@ void popup_diplomat_dialog(struct unit *punit, struct tile *ptile)
  		_("_Cancel"), diplomat_cancel_callback, 0,
 		0);
 
-       if (!diplomat_can_do_action(punit, DIPLOMAT_INVESTIGATE, ptile)) {
-         message_dialog_button_set_sensitive(shl, 0, FALSE);
-       }
-       if (!diplomat_can_do_action(punit, SPY_POISON, ptile)) {
-         message_dialog_button_set_sensitive(shl, 1, FALSE);
-       }
-       if (!diplomat_can_do_action(punit, DIPLOMAT_SABOTAGE, ptile)) {
-         message_dialog_button_set_sensitive(shl, 2, FALSE);
-       }
-       if (!diplomat_can_do_action(punit, DIPLOMAT_STEAL, ptile)) {
-         message_dialog_button_set_sensitive(shl, 3, FALSE);
-       }
-       if (!diplomat_can_do_action(punit, DIPLOMAT_INCITE, ptile)) {
-         message_dialog_button_set_sensitive(shl, 4, FALSE);
-       }
-    }
+      if (!diplomat_can_do_action(punit, DIPLOMAT_EMBASSY, ptile))
+       message_dialog_button_set_sensitive(shl,0,FALSE);
+      if (!diplomat_can_do_action(punit, DIPLOMAT_INVESTIGATE, ptile))
+       message_dialog_button_set_sensitive(shl,1,FALSE);
+      if (!diplomat_can_do_action(punit, SPY_POISON, ptile))
+       message_dialog_button_set_sensitive(shl,2,FALSE);
+      if (!diplomat_can_do_action(punit, DIPLOMAT_SABOTAGE, ptile))
+       message_dialog_button_set_sensitive(shl,3,FALSE);
+      if (!diplomat_can_do_action(punit, DIPLOMAT_STEAL, ptile))
+       message_dialog_button_set_sensitive(shl,4,FALSE);
+      if (!diplomat_can_do_action(punit, DIPLOMAT_INCITE, ptile))
+       message_dialog_button_set_sensitive(shl,5,FALSE);
+     }
 
     diplomat_dialog=shl;
    }else{

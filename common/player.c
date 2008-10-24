@@ -147,28 +147,16 @@ enum dipl_reason pplayer_can_make_treaty(const struct player *p1,
 }
 
 /***************************************************************
-  Check if pplayer has diplomatic relations with pplayer2. 
-  We always have that with ourselves.
+  Check if pplayer has an embassy with pplayer2. We always have
+  an embassy with ourselves.
 ***************************************************************/
 bool player_has_embassy(const struct player *pplayer,
 			const struct player *pplayer2)
 {
-  enum diplstate_type treaty = pplayer_get_diplstate(pplayer, pplayer2)->type;
-
-  if (pplayer == pplayer2) {
-    return TRUE;
-  }
-
-  if (is_barbarian(pplayer2)) {
-    return FALSE;
-  }
-
-  // Gives contact with everyone, except barbarians
-  if (get_player_bonus(pplayer, EFT_HAVE_EMBASSIES) > 0) {
-    return TRUE;
-  }
-
-  return treaty != DS_NO_CONTACT;
+  return (BV_ISSET(pplayer->embassy, player_index(pplayer2))
+          || (pplayer == pplayer2)
+          || (get_player_bonus(pplayer, EFT_HAVE_EMBASSIES) > 0
+              && !is_barbarian(pplayer2)));
 }
 
 /****************************************************************************
@@ -214,9 +202,11 @@ void player_init(struct player *plr)
   plr->is_alive=TRUE;
   plr->is_dying = FALSE;
   plr->surrendered = FALSE;
+  BV_CLR_ALL(plr->embassy);
   for(i = 0; i < MAX_NUM_PLAYERS + MAX_NUM_BARBARIANS; i++) {
     plr->diplstates[i].type = DS_NO_CONTACT;
     plr->diplstates[i].has_reason_to_cancel = 0;
+    plr->diplstates[i].contact_turns_left = 0;
   }
   plr->ai.control=FALSE;
   BV_CLR_ALL(plr->ai.handicaps);
@@ -943,8 +933,9 @@ bool gives_shared_vision(const struct player *me, const struct player *them)
 bool are_diplstates_equal(const struct player_diplstate *pds1,
 			  const struct player_diplstate *pds2)
 {
-  return (pds1->type == pds2->type
-	  && pds1->has_reason_to_cancel == pds2->has_reason_to_cancel);
+  return (pds1->type == pds2->type && pds1->turns_left == pds2->turns_left
+	  && pds1->has_reason_to_cancel == pds2->has_reason_to_cancel
+	  && pds1->contact_turns_left == pds2->contact_turns_left);
 }
 
 /***************************************************************************

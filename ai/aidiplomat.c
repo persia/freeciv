@@ -228,6 +228,16 @@ void ai_choose_diplomat_offensive(struct player *pplayer,
     want = military_amortize(pplayer, pcity, want, time_to_dest, 
                              utype_build_shield_cost(ut));
 
+    if (!player_has_embassy(pplayer, city_owner(acity))
+        && want < 99) {
+        freelog(LOG_DIPLOMAT_BUILD,
+                "A diplomat desired in %s to establish an embassy with %s "
+                "in %s",
+                city_name(pcity),
+                player_name(city_owner(acity)),
+                city_name(acity));
+        want = 99;
+    }
     if (want > choice->want) {
       freelog(LOG_DIPLOMAT_BUILD,
               "%s, %s: %s is desired with want %d to spy in %s (incite "
@@ -256,7 +266,9 @@ void ai_choose_diplomat_offensive(struct player *pplayer,
   business! Note that punit may die or be moved during this function. We
   must be adjacent to target city.
 
-  We steal, incite, sabotage or poison the city, in that order of priority.
+  We try to make embassy first, and abort if we already have one and target
+  is allied. Then we steal, incite, sabotage or poison the city, in that
+  order of priority.
 **************************************************************************/
 static void ai_diplomat_city(struct unit *punit, struct city *ctarget)
 {
@@ -280,10 +292,12 @@ static void ai_diplomat_city(struct unit *punit, struct city *ctarget)
     freelog(LOG_DIPLOMAT, "%s %s[%d] does " #my_act " at %s",       \
             nation_rule_name(nation_of_unit(punit)),                \
             unit_rule_name(punit), punit->id, city_name(ctarget));  \
-    handle_unit_diplomat_action(pplayer, punit->id, my_act,         \
-                                ctarget->id, my_val);               \
+    handle_unit_diplomat_action(pplayer, punit->id,                 \
+                                ctarget->id, my_val, my_act);       \
     return;                                                         \
   }
+
+  T(DIPLOMAT_EMBASSY,0);
 
   if (pplayers_allied(pplayer, tplayer)) {
     return; /* Don't do the rest to allies */
@@ -327,6 +341,7 @@ static void find_city_to_diplomat(struct player *pplayer, struct unit *punit,
                                   struct city **ctarget, int *move_dist,
                                   struct pf_map *map)
 {
+  bool has_embassy;
   int incite_cost = 0; /* incite cost */
   bool dipldef; /* whether target is protected by diplomats */
 
@@ -346,9 +361,10 @@ static void find_city_to_diplomat(struct player *pplayer, struct unit *punit,
     }
     aplayer = city_owner(acity);
 
-    if (aplayer == pplayer
-        || is_barbarian(aplayer)
-        || pplayers_allied(pplayer, aplayer)) {
+    has_embassy = player_has_embassy(pplayer, aplayer);
+
+    if (aplayer == pplayer || is_barbarian(aplayer)
+        || (pplayers_allied(pplayer, aplayer) && has_embassy)) {
       continue; 
     }
 
@@ -356,13 +372,15 @@ static void find_city_to_diplomat(struct player *pplayer, struct unit *punit,
     can_incite = (incite_cost < INCITE_IMPOSSIBLE_COST);
 
     dipldef = (count_diplomats_on_tile(acity->tile) > 0);
-    /* Two actions to consider:
-     * 1. stealing techs OR
-     * 2. inciting revolt */
-    if ((acity->steal == 0
-	 && get_player_research(pplayer)->techs_researched
-            < get_player_research(aplayer)->techs_researched
-	 && !dipldef)
+    /* Three actions to consider:
+     * 1. establishing embassy OR
+     * 2. stealing techs OR
+     * 3. inciting revolt */
+    if (!has_embassy
+        || (acity->steal == 0
+	    && (get_player_research(pplayer)->techs_researched
+		< get_player_research(aplayer)->techs_researched)
+	    && !dipldef)
         || (incite_cost < (pplayer->economic.gold - pplayer->ai.est_upkeep)
             && can_incite && !dipldef)) {
       /* We have the closest enemy city on the continent */
@@ -492,7 +510,7 @@ static bool ai_diplomat_bribe_nearby(struct player *pplayer,
       continue;
     }
     /* Should we make the expense? */
-    cost = pvictim->bribe_cost = unit_bribe_cost(pvictim);
+    cost = unit_bribe_cost(pvictim);
     if (!threat) {
       /* Don't empty our treasure without good reason! */
       gold_avail = pplayer->economic.gold - ai_gold_reserve(pplayer);
@@ -518,8 +536,9 @@ static bool ai_diplomat_bribe_nearby(struct player *pplayer,
     }
 
     if (diplomat_can_do_action(punit, DIPLOMAT_BRIBE, pos.tile)) {
-      handle_unit_diplomat_action(pplayer, punit->id, DIPLOMAT_BRIBE,
-				  unit_list_get(ptile->units, 0)->id, -1);
+      handle_unit_diplomat_action(pplayer, punit->id,
+				  unit_list_get(ptile->units, 0)->id, -1,
+				  DIPLOMAT_BRIBE);
       /* autoattack might kill us as we move in */
       if (game_find_unit_by_number(sanity) && punit->moves_left > 0) {
         return TRUE;
@@ -593,7 +612,8 @@ void ai_manage_diplomat(struct player *pplayer, struct unit *punit)
       if (same_pos(ctarget->tile, punit->tile)) {
         failure = TRUE;
       } else if (pplayers_allied(pplayer, city_owner(ctarget))
-          && punit->ai.ai_role == AIUNIT_ATTACK) {
+          && punit->ai.ai_role == AIUNIT_ATTACK
+          && player_has_embassy(pplayer, city_owner(ctarget))) {
         /* We probably incited this city with another diplomat */
         failure = TRUE;
       } else if (!pplayers_allied(pplayer, city_owner(ctarget))

@@ -210,8 +210,8 @@ void diplomat_investigate(struct player *pplayer, struct unit *pdiplomat,
 
   Only send back to the originating connection, if there is one. (?)
 ****************************************************************************/
-void spy_get_sabotage_list(struct player *pplayer, struct unit *pdiplomat,
-			   struct city *pcity)
+void spy_send_sabotage_list(struct connection *pc, struct unit *pdiplomat,
+			    struct city *pcity)
 {
   struct packet_city_sabotage_list packet;
 
@@ -226,10 +226,74 @@ void spy_get_sabotage_list(struct player *pplayer, struct unit *pdiplomat,
 
   packet.diplomat_id = pdiplomat->id;
   packet.city_id = pcity->id;
-  lsend_packet_city_sabotage_list(player_reply_dest(pplayer), &packet);
+  send_packet_city_sabotage_list(pc, &packet);
+}
+
+/******************************************************************************
+  Establish an embassy.
+
+  - Either a Diplomat or Spy can establish an embassy.
+
+  - Barbarians always execute ambassadors.
+  - Otherwise, the embassy is created.
+  - It costs some minimal movement to establish an embassy.
+
+  - Diplomats are consumed in creation of embassy.
+  - Spies always survive.
+****************************************************************************/
+void diplomat_embassy(struct player *pplayer, struct unit *pdiplomat,
+		      struct city *pcity)
+{
+  struct player *cplayer;
+
+  /* Fetch target city's player.  Sanity checks. */
+  if (!pcity)
+    return;
+  cplayer = city_owner (pcity);
+  if ((cplayer == pplayer) || !cplayer)
+    return;
+
+  freelog (LOG_DEBUG, "embassy: unit: %d", pdiplomat->id);
+
+  /* Check for Barbarian response. */
+  if (get_player_bonus(cplayer, EFT_NO_DIPLOMACY)) {
+    notify_player(pplayer, pcity->tile, E_MY_DIPLOMAT_FAILED,
+		     _("Your %s was executed in %s by primitive %s."),
+		     unit_name_translation(pdiplomat),
+		     city_name(pcity),
+		     nation_plural_for_player(cplayer));
+    wipe_unit(pdiplomat);
+    return;
+  }
+
+  freelog (LOG_DEBUG, "embassy: succeeded");
+
+  establish_embassy(pplayer, cplayer);
+
+  /* Notify everybody involved. */
+  notify_player(pplayer, pcity->tile, E_MY_DIPLOMAT_EMBASSY,
+		   _("You have established an embassy in %s."),
+		   city_name(pcity));
+  notify_player(cplayer, pcity->tile, E_ENEMY_DIPLOMAT_EMBASSY,
+		   _("The %s have established an embassy in %s."),
+		   nation_plural_for_player(pplayer),
+		   city_name(pcity));
+
+  /* Charge a nominal amount of movement for this. */
+  (pdiplomat->moves_left)--;
+  if (pdiplomat->moves_left < 0) {
+    pdiplomat->moves_left = 0;
+  }
 
   /* this may cause a diplomatic incident */
-  maybe_cause_incident(SPY_GET_SABOTAGE_LIST, pplayer, NULL, pcity);
+  maybe_cause_incident(DIPLOMAT_EMBASSY, pplayer, NULL, pcity);
+
+  /* Spies always survive. Diplomats never do. */
+  if (!unit_has_type_flag(pdiplomat, F_SPY)) {
+    wipe_unit(pdiplomat);
+  } else {
+    send_unit_info (pplayer, pdiplomat);
+  }
 }
 
 /******************************************************************************
@@ -326,8 +390,9 @@ void diplomat_bribe(struct player *pplayer, struct unit *pdiplomat,
 		    struct unit *pvictim)
 {
   struct player *uplayer;
-  int diplomat_id = diplomat_id;
   struct tile *victim_tile;
+  int bribe_cost;
+  int diplomat_id = pdiplomat->id;
   struct unit *gained_unit = NULL;
 
   /* Fetch target unit's player.  Sanity checks. */
@@ -340,13 +405,6 @@ void diplomat_bribe(struct player *pplayer, struct unit *pdiplomat,
 
   freelog (LOG_DEBUG, "bribe-unit: unit: %d", pdiplomat->id);
 
-  /* Update bribe cost. */
-  if (pvictim->bribe_cost == -1) {
-    freelog (LOG_ERROR, "Bribe cost -1 in diplomat_bribe by %s",
-	     pplayer->name);
-    pvictim->bribe_cost = unit_bribe_cost (pvictim);
-  }
-
   /* Check for unit from a bribable government. */
   if (get_player_bonus(uplayer, EFT_UNBRIBABLE_UNITS)) {
     notify_player(pplayer, pdiplomat->tile,
@@ -355,8 +413,11 @@ void diplomat_bribe(struct player *pplayer, struct unit *pdiplomat,
     return;
   }
 
+  /* Get bribe cost, ignoring any previously saved value. */
+  bribe_cost = unit_bribe_cost(pvictim);
+
   /* If player doesn't have enough gold, can't bribe. */
-  if (pplayer->economic.gold < pvictim->bribe_cost) {
+  if (pplayer->economic.gold < bribe_cost) {
     notify_player(pplayer, pdiplomat->tile,
 		     E_MY_DIPLOMAT_FAILED,
 		     _("You don't have enough gold to"
@@ -406,7 +467,7 @@ void diplomat_bribe(struct player *pplayer, struct unit *pdiplomat,
 		nation_plural_for_player(pplayer));
 
   /* This costs! */
-  pplayer->economic.gold -= pvictim->bribe_cost;
+  pplayer->economic.gold -= bribe_cost;
 
   /* This may cause a diplomatic incident */
   maybe_cause_incident(DIPLOMAT_BRIBE, pplayer, pvictim, NULL);
@@ -622,7 +683,7 @@ void diplomat_incite(struct player *pplayer, struct unit *pdiplomat,
     return;
   }
 
-  /* Get incite cost. */
+  /* Get incite cost, ignoring any previously saved value. */
   revolt_cost = city_incite_cost(pplayer, pcity);
 
   /* If player doesn't have enough gold, can't incite a revolt. */
@@ -1214,8 +1275,8 @@ static void maybe_cause_incident(enum diplomat_actions action, struct player *of
  		    city_name(victim_city));
       break;
     case DIPLOMAT_MOVE:
+    case DIPLOMAT_EMBASSY:
     case DIPLOMAT_INVESTIGATE:
-    case SPY_GET_SABOTAGE_LIST:
       return; /* These are not considered offences */
     case DIPLOMAT_ANY_ACTION:
     case SPY_POISON:

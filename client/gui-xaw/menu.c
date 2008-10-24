@@ -26,12 +26,14 @@
 #include <X11/Xaw/SmeLine.h>
 
 /* utility */
+
 #include "fcintl.h"
 #include "mem.h"
 #include "movement.h"
 #include "support.h"
 
 /* common */
+
 #include "game.h"
 #include "government.h"
 #include "map.h"

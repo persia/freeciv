@@ -34,6 +34,16 @@
 #include "unit.h"
 #include "unitlist.h"
 
+
+/**************************************************************************
+bribe unit
+investigate
+poison
+make revolt
+establish embassy
+sabotage city
+**************************************************************************/
+
 /**************************************************************************
 Whether a diplomat can move to a particular tile and perform a
 particular action there.
@@ -81,6 +91,11 @@ bool is_diplomat_action_available(const struct unit *pdiplomat,
 	return pplayers_at_war(unit_owner(pdiplomat), city_owner(pcity));
       if(action==DIPLOMAT_MOVE)
         return pplayers_allied(unit_owner(pdiplomat), city_owner(pcity));
+      if (action == DIPLOMAT_EMBASSY
+          && !get_player_bonus(city_owner(pcity), EFT_NO_DIPLOMACY)
+          && !player_has_embassy(unit_owner(pdiplomat), city_owner(pcity))) {
+	return TRUE;
+      }
       if(action==SPY_POISON &&
 	 pcity->size>1 &&
 	 unit_has_type_flag(pdiplomat, F_SPY))
@@ -94,8 +109,6 @@ bool is_diplomat_action_available(const struct unit *pdiplomat,
         return !pplayers_allied(city_owner(pcity), unit_owner(pdiplomat));
       if(action==DIPLOMAT_ANY_ACTION)
         return TRUE;
-      if (action==SPY_GET_SABOTAGE_LIST && unit_has_type_flag(pdiplomat, F_SPY))
-	return pplayers_at_war(unit_owner(pdiplomat), city_owner(pcity));
     }
   } else { /* Action against a unit at a tile */
     /* If it is made possible to do action against allied units
@@ -1383,7 +1396,6 @@ struct unit *create_unit_virtual(struct player *pplayer, struct city *pcity,
   punit->ai.passenger = 0;
   punit->ai.bodyguard = 0;
   punit->ai.charge = 0;
-  punit->bribe_cost = -1; /* flag value */
   punit->transported_by = -1;
   punit->focus_status = FOCUS_AVAIL;
   punit->ord_map = 0;

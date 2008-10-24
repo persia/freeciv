@@ -67,7 +67,8 @@ static void diplomat_bribe_callback(GtkWidget *w, gpointer data)
 {
   if (game_find_unit_by_number(diplomat_id)
    && game_find_unit_by_number(diplomat_target_id)) {
-    dsend_packet_unit_bribe_inq(&client.conn, diplomat_target_id);
+    request_diplomat_answer(DIPLOMAT_BRIBE, diplomat_id,
+			    diplomat_target_id, 0);
   }
   gtk_widget_destroy(diplomat_dialog);
 }
@@ -75,7 +76,7 @@ static void diplomat_bribe_callback(GtkWidget *w, gpointer data)
 /****************************************************************
 ...
 *****************************************************************/
-void popup_bribe_dialog(struct unit *punit)
+void popup_bribe_dialog(struct unit *punit, int cost)
 {
   GtkWidget *shell;
 
@@ -85,11 +86,11 @@ void popup_bribe_dialog(struct unit *punit)
                                  GTK_STOCK_OK, NULL, NULL, NULL);
     gtk_window_present(GTK_WINDOW(shell));
     return;
-  } else if (punit->bribe_cost <= client.conn.playing->economic.gold) {
+  } else if (cost <= client.conn.playing->economic.gold) {
     shell = gtk_message_dialog_new(NULL, 0,
       GTK_MESSAGE_QUESTION, GTK_BUTTONS_YES_NO,
       _("Bribe unit for %d gold?\nTreasury contains %d gold."),
-      punit->bribe_cost, client.conn.playing->economic.gold);
+      cost, client.conn.playing->economic.gold);
     gtk_window_set_title(GTK_WINDOW(shell), _("Bribe Enemy Unit"));
     setup_dialog(shell, toplevel);
   } else {
@@ -97,7 +98,7 @@ void popup_bribe_dialog(struct unit *punit)
       0,
       GTK_MESSAGE_INFO, GTK_BUTTONS_CLOSE,
       _("Bribing the unit costs %d gold.\nTreasury contains %d gold."),
-      punit->bribe_cost, client.conn.playing->economic.gold);
+      cost, client.conn.playing->economic.gold);
     gtk_window_set_title(GTK_WINDOW(shell), _("Traitors Demand Too Much!"));
     setup_dialog(shell, toplevel);
   }
@@ -139,6 +140,19 @@ static void spy_sabotage_unit_callback(GtkWidget *w, gpointer data)
 {
   request_diplomat_action(SPY_SABOTAGE_UNIT, diplomat_id,
 			  diplomat_target_id, 0);
+  gtk_widget_destroy(diplomat_dialog);
+}
+
+/****************************************************************
+...
+*****************************************************************/
+static void diplomat_embassy_callback(GtkWidget *w, gpointer data)
+{
+  if(game_find_unit_by_number(diplomat_id) && 
+     (game_find_city_by_number(diplomat_target_id))) { 
+    request_diplomat_action(DIPLOMAT_EMBASSY, diplomat_id,
+			    diplomat_target_id, 0);
+  }
   gtk_widget_destroy(diplomat_dialog);
 }
 
@@ -472,7 +486,7 @@ static void spy_request_sabotage_list(GtkWidget *w, gpointer data)
 {
   if (game_find_unit_by_number(diplomat_id)
    && game_find_city_by_number(diplomat_target_id)) {
-    request_diplomat_action(SPY_GET_SABOTAGE_LIST, diplomat_id,
+    request_diplomat_answer(DIPLOMAT_SABOTAGE, diplomat_id,
 			    diplomat_target_id, 0);
   }
   gtk_widget_destroy(diplomat_dialog);
@@ -497,7 +511,8 @@ static void diplomat_incite_callback(GtkWidget *w, gpointer data)
 {
   if (game_find_unit_by_number(diplomat_id)
    && game_find_city_by_number(diplomat_target_id)) {
-    dsend_packet_city_incite_inq(&client.conn, diplomat_target_id);
+    request_diplomat_answer(DIPLOMAT_INCITE, diplomat_id,
+			    diplomat_target_id, 0);
   }
   gtk_widget_destroy(diplomat_dialog);
 }
@@ -517,11 +532,11 @@ static void incite_response(GtkWidget *w, gint response)
 /****************************************************************
 Popup the yes/no dialog for inciting, since we know the cost now
 *****************************************************************/
-void popup_incite_dialog(struct city *pcity)
+void popup_incite_dialog(struct city *pcity, int cost)
 {
   GtkWidget *shell;
   
-  if (INCITE_IMPOSSIBLE_COST == pcity->incite_revolt_cost) {
+  if (INCITE_IMPOSSIBLE_COST == cost) {
     shell = gtk_message_dialog_new(NULL,
       0,
       GTK_MESSAGE_INFO, GTK_BUTTONS_CLOSE,
@@ -529,12 +544,12 @@ void popup_incite_dialog(struct city *pcity)
       city_name(pcity));
     gtk_window_set_title(GTK_WINDOW(shell), _("City can't be incited!"));
   setup_dialog(shell, toplevel);
-  } else if (pcity->incite_revolt_cost <= client.conn.playing->economic.gold) {
+  } else if (cost <= client.conn.playing->economic.gold) {
     shell = gtk_message_dialog_new(NULL,
       0,
       GTK_MESSAGE_QUESTION, GTK_BUTTONS_YES_NO,
       _("Incite a revolt for %d gold?\nTreasury contains %d gold."),
-      pcity->incite_revolt_cost, client.conn.playing->economic.gold);
+      cost, client.conn.playing->economic.gold);
     gtk_window_set_title(GTK_WINDOW(shell), _("Incite a Revolt!"));
     setup_dialog(shell, toplevel);
   } else {
@@ -542,7 +557,7 @@ void popup_incite_dialog(struct city *pcity)
       0,
       GTK_MESSAGE_INFO, GTK_BUTTONS_CLOSE,
       _("Inciting a revolt costs %d gold.\nTreasury contains %d gold."),
-      pcity->incite_revolt_cost, client.conn.playing->economic.gold);
+      cost, client.conn.playing->economic.gold);
     gtk_window_set_title(GTK_WINDOW(shell), _("Traitors Demand Too Much!"));
     setup_dialog(shell, toplevel);
   }
@@ -611,6 +626,7 @@ void popup_diplomat_dialog(struct unit *punit, struct tile *dest_tile)
     if (!unit_has_type_flag(punit, F_SPY)){
       shl = popup_choice_dialog(GTK_WINDOW(toplevel),
 	_("Choose Your Diplomat's Strategy"), buf,
+	_("Establish _Embassy"), diplomat_embassy_callback, NULL,
 	_("_Investigate City"), diplomat_investigate_callback, NULL,
 	_("_Sabotage City"), diplomat_sabotage_callback, NULL,
 	_("Steal _Technology"), diplomat_steal_callback, NULL,
@@ -619,6 +635,8 @@ void popup_diplomat_dialog(struct unit *punit, struct tile *dest_tile)
 	GTK_STOCK_CANCEL, diplomat_cancel_callback, NULL,
 	NULL);
 
+      if (!diplomat_can_do_action(punit, DIPLOMAT_EMBASSY, dest_tile))
+	choice_dialog_button_set_sensitive(shl, 0, FALSE);
       if (!diplomat_can_do_action(punit, DIPLOMAT_INVESTIGATE, dest_tile))
 	choice_dialog_button_set_sensitive(shl, 1, FALSE);
       if (!diplomat_can_do_action(punit, DIPLOMAT_SABOTAGE, dest_tile))
@@ -632,6 +650,7 @@ void popup_diplomat_dialog(struct unit *punit, struct tile *dest_tile)
     } else {
        shl = popup_choice_dialog(GTK_WINDOW(toplevel),
 	_("Choose Your Spy's Strategy"), buf,
+	_("Establish _Embassy"), diplomat_embassy_callback, NULL,
 	_("_Investigate City"), diplomat_investigate_callback, NULL,
 	_("_Poison City"), spy_poison_callback, NULL,
 	_("Industrial _Sabotage"), spy_request_sabotage_list, NULL,
@@ -641,6 +660,8 @@ void popup_diplomat_dialog(struct unit *punit, struct tile *dest_tile)
 	GTK_STOCK_CANCEL, diplomat_cancel_callback, NULL,
 	NULL);
 
+      if (!diplomat_can_do_action(punit, DIPLOMAT_EMBASSY, dest_tile))
+	choice_dialog_button_set_sensitive(shl, 0, FALSE);
       if (!diplomat_can_do_action(punit, DIPLOMAT_INVESTIGATE, dest_tile))
 	choice_dialog_button_set_sensitive(shl, 1, FALSE);
       if (!diplomat_can_do_action(punit, SPY_POISON, dest_tile))

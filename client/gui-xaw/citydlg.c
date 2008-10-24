@@ -32,7 +32,8 @@
 #include <X11/Xaw/Toggle.h>     
 #include <X11/IntrinsicP.h>
 
-/* utilitity */
+/* utility */
+
 #include "fcintl.h"
 #include "mem.h"
 #include "genlist.h"
@@ -40,6 +41,7 @@
 #include "support.h"
 
 /* common */
+
 #include "city.h"
 #include "connection.h"	/* can_conn_edit */
 #include "game.h"
